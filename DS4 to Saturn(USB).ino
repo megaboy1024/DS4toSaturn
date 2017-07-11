@@ -11,10 +11,12 @@ PS4USB PS4(&Usb);
 
 uint8_t oldL2Value, oldR2Value;
 
-
 #define pin_In_S0 3 //th Select0
 #define pin_In_S1 4 //tr Select1
 #define DeadZone 10  //Dead area of analog stick
+
+uint8_t  mode_Selector = 0;  //0 is digital mode 1 is analog
+float sensitivity = 1.0; //set the sensitivity of the analog stick. Default is 1. Increment in .1's
 
 char DATA1_1, DATA1_2;
 char DATA2_1, DATA2_2;
@@ -25,13 +27,10 @@ char DATA6_1, DATA6_2;
 char DATAEND_1, DATAEND_2;
 
 bool ACK_LINE = 0;
-int  mode_Selector = 0; //0 is digital mode 1 is analog
-
 
 void setup() {
  pinMode(pin_In_S0, INPUT);
  pinMode(pin_In_S1, INPUT);
-
 
  DATA1_1 = B00001111;                 // DATA1_1
  DATA1_2 = B00001111;                 // DATA1_2
@@ -66,11 +65,9 @@ void setup() {
  
  //pull the ack line high on startup
  changeACKState();  
- 
  delayMicroseconds(500);
 
  }
-
 
  void loop() {
  Usb.Task();
@@ -87,8 +84,6 @@ void setup() {
 			Serial.print(F("\r\nController switched to Digital"));
 		}
 	}
- 
- 
 	if(mode_Selector==0){
 		emulateDigitalController();
 		PS4.setLed(Blue);
@@ -97,7 +92,9 @@ void setup() {
 		emulateAnalogController();
 		PS4.setLed(Green);
 	}
- 
+ }
+ else{
+ 	sendDataStateHigh(); //if no PS controller is attached we send the data lines to high emulating no conrtoller for the Saturn
  }
  }
 
@@ -141,17 +138,12 @@ void setup() {
  
  ///// START FIRST BYTE
   
-    /* while (TR_REQ == 1 && TH_SEL == 0) {}  // Wait for Saturn to request first half of Data1
-    PORTC = DATA1_1;        // DR, DL, DD, DU
-    TL_ACK = 0;             // Here is the data */
-  
   // Wait for Saturn to request first half of Data1
  while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA1_1;
  changeACKState();
- 
  
  // Wait for Saturn to request second half of Data1
  while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){ 
@@ -163,7 +155,6 @@ void setup() {
 
 ///// START SECOND BYTE
 
- 
  //Wait for Saturn to request first half of Data2
  while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){   
  }
@@ -171,7 +162,6 @@ void setup() {
  PORTC &= ~ DATA2_1;
  changeACKState();
  
-
   // Wait for Saturn to request second half of Data2
  while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){     
  }
@@ -179,7 +169,6 @@ void setup() {
  PORTC &= ~ DATA2_2;
  changeACKState();
  
-  
 ///// END SECOND BYTE
 
 ///// START THIRD BYTE, END OF DATA
@@ -189,7 +178,6 @@ void setup() {
  }
  sendDataStateLow();
  changeACKState();
- 
  
  // Wait for Saturn to request second half of End
  while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){
@@ -211,7 +199,6 @@ void setup() {
  DATA2_1 =  B00000000;
  DATA2_2 =  B00000000;
 
- 
   //If the Up button pressed
  if(PS4.getButtonPress(UP)){
 	DATA1_1 |= B00000001;
@@ -230,19 +217,19 @@ void setup() {
  if(PS4.getButtonPress(CIRCLE)){
 	DATA1_2 |= B00000001;
  }//If the C button pressed
- if (PS4.getButtonPress(L3)){
+ if (PS4.getButtonPress(R3)){
 	DATA1_2 |= B00000010;
  }
  //If the A button pressed
  if (PS4.getButtonPress(CROSS)){
 	DATA1_2 |= B00000100;
  }//If the Start button pressed
- if (PS4.getButtonClick(PS)){
+ if (PS4.getButtonPress(PS)){
 	DATA1_2 |= B00001000;
  }
  
   //If the Z button pressed
-if(PS4.getButtonClick(R3)){
+if(PS4.getButtonPress(L3)){
 	DATA2_1 |= B00000001;
  }
  //If the Y button pressed
@@ -260,8 +247,6 @@ if(PS4.getButtonClick(R3)){
   if (PS4.getButtonPress(L1)){
 	DATA2_2 |= B00001000;
  }
- //////////////////////////////////////////////////////
- 
 }
 
 void emulateAnalogController(){
@@ -311,7 +296,6 @@ void emulateAnalogController(){
  PORTC &= ~ DATA1_1;
  changeACKState();
  
- 
  // Wait for Saturn to request second half of Data1
  while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){    
  }
@@ -329,7 +313,6 @@ void emulateAnalogController(){
  PORTC &= ~ DATA2_1;
  changeACKState();
 
-
   // Wait for Saturn to request second half of Data2
  while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){
  }
@@ -338,7 +321,6 @@ void emulateAnalogController(){
  changeACKState();
 
 ///// END SECOND BYTE
-
 
  ///// START THIRD BYTE,
   
@@ -358,7 +340,6 @@ void emulateAnalogController(){
  changeACKState();
 
 //// END THIRD BYTE
-
 
  ///// START FOURTH BYTE,
  
@@ -415,9 +396,6 @@ void emulateAnalogController(){
  changeACKState();
 ///// END SIXTH BYTE
 
-////////////////////////////////////////////////////////////////////////////////
-  
-   
  ///// START SEVENTH BYTE, END OF DATA
   
   // Wait for Saturn to request first half End
@@ -447,7 +425,6 @@ void emulateAnalogController(){
  DATA2_1 =  B00000000;
  DATA2_2 =  B00000000;
 
- 
   //If the Up button pressed
  if(PS4.getButtonPress(UP)){
 	DATA1_1 |= B00000001;
@@ -466,19 +443,19 @@ void emulateAnalogController(){
  if(PS4.getButtonPress(CIRCLE)){
 	DATA1_2 |= B00000001;
  }//If the C button pressed
- if (PS4.getButtonPress(L3)){
+ if (PS4.getButtonPress(R3)){
 	DATA1_2 |= B00000010;
  }
  //If the A button pressed
  if (PS4.getButtonPress(CROSS)){
 	DATA1_2 |= B00000100;
  }//If the Start button pressed
- if (PS4.getButtonClick(PS)){
+ if (PS4.getButtonPress(PS)){
 	DATA1_2 |= B00001000;
  }
  
   //If the Z button pressed
-if(PS4.getButtonClick(R3)){
+if(PS4.getButtonPress(L3)){
 	DATA2_1 |= B00000001;
  }
  //If the Y button pressed
@@ -500,8 +477,9 @@ if(PS4.getButtonClick(R3)){
  ///Data3_1
  analogReading = PS4.getAnalogHat(LeftHatX);
  if(analogReading >=(128+DeadZone) || analogReading <= (128-DeadZone)) {
-	 analogReading = (255-analogReading);// since the analog stick give a reverse output to what the saturn needs	 
-	getBinary(analogReading,first_nibble,second_nibble);
+	analogReading = round((255-analogReading)*sensitivity);// since the analog stick gives a reverse output to what the saturn needs we need to subtract the reading from 255 
+	if(analogReading >255){analogReading = 255;}
+    getBinary(analogReading,first_nibble,second_nibble);
 	DATA3_1 = changeToDataState(first_nibble); 
 	button_clicked=true;
  }//x axis default in netural
@@ -521,11 +499,10 @@ if(PS4.getButtonClick(R3)){
  ///Data4_1
  analogReading = PS4.getAnalogHat(LeftHatY);
 if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
-	analogReading = (255-analogReading); // since the analog stick give a reverse output to what the saturn needs
-	getBinary(analogReading,first_nibble,second_nibble);
+	analogReading = round((255-analogReading)*sensitivity); // since the analog stick give a reverse output to what the saturn needs we need to subtract the reading from 255
+	if(analogReading >255){analogReading = 255;}
+    getBinary(analogReading,first_nibble,second_nibble);
 	DATA4_1 = changeToDataState(first_nibble);
-	//Serial.print(F("\r\nAnalog Y, "));
-	//Serial.print(analogReading);  
 	button_clicked=true;
  }//x axis default in netural
  else{
@@ -541,11 +518,12 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	DATA4_2 = B00000000;
  }
  
- 
  //Data5_1
-  if(PS4.getAnalogButton(R2) != oldR2Value) {
-	getBinary(PS4.getAnalogButton(R2),first_nibble,second_nibble);
-	DATA5_1 = changeToDataState(first_nibble);  
+ analogReading = PS4.getAnalogButton(R2);
+  if(analogReading != oldR2Value) {
+	getBinary(analogReading,first_nibble,second_nibble);
+	DATA5_1 = changeToDataState(first_nibble);
+	oldR2Value = analogReading; 
 	button_clicked=true;
  }//x axis default in netural
  else{
@@ -554,7 +532,6 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
   ///Data5_2
   if(button_clicked){
 	DATA5_2 = changeToDataState(second_nibble);
-	oldR2Value = PS4.getAnalogButton(R2);
 	button_clicked=false;
  }//run only if there was no input from the dual shock controller
  else{
@@ -563,10 +540,11 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
  }
  
  //Data6_1
-  if(PS4.getAnalogButton(L2) != oldR2Value) {
-	getBinary(PS4.getAnalogButton(L2),first_nibble,second_nibble);
-	DATA6_1 |= changeToDataState(first_nibble);   
-	oldR2Value = PS4.getAnalogButton(L2);
+ analogReading = PS4.getAnalogButton(L2);
+  if(analogReading != oldL2Value) {
+	getBinary(analogReading,first_nibble,second_nibble);
+	DATA6_1 = changeToDataState(first_nibble);   
+	oldL2Value = analogReading;
 	button_clicked=true;
  }//x axis default in netural
  else{
@@ -594,7 +572,6 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	PORTC &=~ B00010000;
 	ACK_LINE =0;
   }
- 
  }
 
  void sendDataStateLow(){
@@ -646,8 +623,8 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 
  //here we convert the integer reading from the DS4 controller to a binary number and split it into two nibbles
  void getBinary(int num, char *first_nibble, char* second_nibble)
- {
-	for (int i = 7; i >= 0; --i, num >>= 1){
+ {	
+	for (int i = 7; i >= 0; --i, num >>= 1){		
 		if (i>3){
 			second_nibble[i-4] = (num & 1) + '0';
 		}
@@ -656,26 +633,3 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 		}
 	}	
  }
- 
- 
-//Not used at this time
-/* 
-int readS0(){
-  if(PIND & (1<<B00001000)){
-   return 1;
-  }
-  else{
-  return 0;
-  }
-}
-
-int readS1(){
-
-  if(PIND & (1<<B00001000)){
-   return 1;
-  }
-  else{
-  return 0;
-  }
-}
-*/
