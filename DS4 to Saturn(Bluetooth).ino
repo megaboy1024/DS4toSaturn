@@ -1,6 +1,6 @@
 #include <PS4USB.h>
 
-// Satisfy the IDE, which needs to see the include statment in the ino too.
+// Satisfy the IDE, which needs to see the include statement in the ino too.
 #ifdef dobogusinclude
 //#include <spi4teensy3.h>
 #include <SPI.h>
@@ -12,10 +12,6 @@ BTD Btd(&Usb); // Bluetooth instance
 PS4BT PS4(&Btd, PAIR); //this creates instance of the PS4BT class
 //Pair your Dual Shock controller the usual way by holding the PS button plus the share button
 
-uint8_t oldL2Value, oldR2Value;
-
-#define pin_In_S0 3 //th Select0
-#define pin_In_S1 4 //tr Select1
 
 #define DeadZone 10  //Dead area of analog stick
 uint8_t  mode_Selector = 0;  //0 is digital mode 1 is analog
@@ -30,10 +26,11 @@ char DATA6_1, DATA6_2;
 char DATAEND_1, DATAEND_2;
 
 bool ACK_LINE = 0;
+bool battery_status = false;
+long battery_timer_start;
+long battery_timer_elapsed;
 
 void setup() {
- pinMode(pin_In_S0, INPUT);
- pinMode(pin_In_S1, INPUT);
 
  DATA1_1 = B00001111;                 // DATA1_1
  DATA1_2 = B00001111;                 // DATA1_2
@@ -47,12 +44,11 @@ void setup() {
  DATA5_2 = B00001111;                 // DATA5_2
  DATA6_1 = B00001111;                 // DATA6_2
  DATA6_2 = B00001111;                 // DATA6_2
- DATAEND_1 = B00000000;             
- DATAEND_2 = B00000001;              
+ DATAEND_1 = B00000000;
+ DATAEND_2 = B00000001;
 
  DDRC = B00011111;
- //DDRD = DDRD | B00000000;
-  
+
   Serial.begin(115200);
 #if !defined(__MIPSEL__)
   while (!Serial); // Wait for serial port to connect - used on Leonardo, Teensy and other boards with built-in USB CDC serial connection
@@ -61,22 +57,24 @@ void setup() {
     Serial.print(F("\r\nOSC did not start"));
     while (1); // Halt
   }
- Serial.print(F("\r\nPS4 USB Library Started"));  
-  
- //we need to wait for the saturn to startup, 1.5 seconds
- //delay(1500);
+ Serial.print(F("\r\nPS4 USB Library Started")); 
  
- //pull the ack line high on startup
- changeACKState();  
- delayMicroseconds(500);
 
+ //pull the ack line high on startup
+ changeACKState();
+ 
+ //we need to wait for the saturn to startup, 1.5 seconds
+ delayMicroseconds(500);
+ battery_timer_start = millis();
  }
 
  void loop() {
  Usb.Task();
- 
+ checkBatteryStatus();
+
  //Changes the controller from Digital to Analog
  if (PS4.connected()) {
+
 	if (PS4.getButtonClick(OPTIONS)){
 		if(mode_Selector==0){		
 			mode_Selector=1; //change state to now operating in analog mode
@@ -89,15 +87,15 @@ void setup() {
 	}
 	if(mode_Selector==0){
 		emulateDigitalController();
-		PS4.setLed(Blue);
+		setLedColor(); //led would change to blue
 	}
 	else{
 		emulateAnalogController();
-		PS4.setLed(Green);
+		setLedColor(); //led would change to green
 	}
  }
  else{
- 	sendDataStateHigh(); //if no PS controller is attached we send the data lines to high emulating no conrtoller for the Saturn
+ 	sendDataStateHigh(); //if no PS controller is attached we send the data lines to high emulating no controller for the Saturn
  }
  }
 
@@ -108,12 +106,12 @@ void setup() {
  //we now start communication with the saturn
  
  // Wait for the Saturn to select controller
- while(digitalRead(pin_In_S0)==1){
+ while(readS0()==1){
  }
  delayMicroseconds(40);
  
  //waiting for the saturn
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){
+ while(readS1()==1 && readS0()==0){
  }
  
  //0000 = Digital  // 0001 = Analog
@@ -127,7 +125,7 @@ void setup() {
  //at this stage in the sequence s1 goes high which is the saturn again requesting data from the controller
  
  // Wait for Saturn to request Data Size
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){  
+ while(readS1()==0 && readS0()==0){
   //Serial.print(F("\r\nwaiting for Saturn 2")); 
  }
  //sendDataStateLow();
@@ -142,14 +140,14 @@ void setup() {
  ///// START FIRST BYTE
   
   // Wait for Saturn to request first half of Data1
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){
+ while(readS1()==1 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA1_1;
  changeACKState();
  
  // Wait for Saturn to request second half of Data1
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){ 
+ while(readS1()==0 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA1_2;
@@ -159,14 +157,14 @@ void setup() {
 ///// START SECOND BYTE
 
  //Wait for Saturn to request first half of Data2
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){   
+ while(readS1()==1 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA2_1;
  changeACKState();
  
   // Wait for Saturn to request second half of Data2
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){     
+ while(readS1()==0 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA2_2;
@@ -177,23 +175,23 @@ void setup() {
 ///// START THIRD BYTE, END OF DATA
  
  // Wait for Saturn to request first half End
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){ 
+ while(readS1()==1 && readS0()==0){
  }
  sendDataStateLow();
  changeACKState();
  
  // Wait for Saturn to request second half of End
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){
+ while(readS1()==0 && readS0()==0){
  }
  //Not needed since we are already in a low state for all output
- sendDataStateLow();
+ //sendDataStateLow();
  PORTC |= DATAEND_2;
  changeACKState();
 
 //// END THIRD BYTE
   
 
- while(digitalRead(pin_In_S0)==0){ 
+ while(readS0()==0){ 
  }
 ///// END COMMS WITH SATURN
  
@@ -262,12 +260,12 @@ void emulateAnalogController(){
  //we now start communication with the saturn
  
  // Wait for the Saturn to select controller
- while(digitalRead(pin_In_S0)==1){ 
+ while(readS0()==1){ 
  }
  delayMicroseconds(40);
  
  //waiting for the saturn
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){ 
+ while(readS1()==1 && readS0()==0){ 
  }
  
  //0000 = Digital  // 0001 = Analog
@@ -280,7 +278,7 @@ void emulateAnalogController(){
  //at this stage in the sequence s1 goes high which is the saturn again requesting data from the controller
  
  // Wait for Saturn to request Data Size
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){   
+ while(readS1()==0 && readS0()==0){
  }
  sendDataStateLow();
  //we now set 0010, which means 2 Bytes for the remaining Data. 6 for the analog controller(0110)
@@ -293,14 +291,14 @@ void emulateAnalogController(){
  ///// START FIRST BYTE
   
   // Wait for Saturn to request first half of Data1
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){   
+ while(readS1()==1 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA1_1;
  changeACKState();
  
  // Wait for Saturn to request second half of Data1
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){    
+ while(readS1()==0 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA1_2;
@@ -310,14 +308,14 @@ void emulateAnalogController(){
 ///// START SECOND BYTE
  
  //Wait for Saturn to request first half of Data2
- while(digitalRead(pin_In_S1)==1 && digitalRead(pin_In_S0)==0){  
+ while(readS1()==1 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA2_1;
  changeACKState();
 
   // Wait for Saturn to request second half of Data2
- while(digitalRead(pin_In_S1)==0 && digitalRead(pin_In_S0)==0){
+ while(readS1()==0 && readS0()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA2_2;
@@ -326,18 +324,18 @@ void emulateAnalogController(){
 ///// END SECOND BYTE
 
  ///// START THIRD BYTE,
-  
+
 // Wait for Saturn to request first half of Data3
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==1){    
-  }
-  
+ while(readS0()==0 && readS1()==1){
+ }
+
  sendDataStateHigh();
  PORTC &= ~ DATA3_1;
  changeACKState();
  // Wait for Saturn to request second half of Data3
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==0){    
+ while(readS0()==0 && readS1()==0){
  }
- 
+
  sendDataStateHigh();
  PORTC &= ~ DATA3_2;
  changeACKState();
@@ -345,18 +343,18 @@ void emulateAnalogController(){
 //// END THIRD BYTE
 
  ///// START FOURTH BYTE,
- 
+
 // Wait for Saturn to request first half of Data4
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==1){    
+ while(readS0()==0 && readS1()==1){
  }
-  
+
  sendDataStateHigh();
  PORTC &= ~ DATA4_1;
  changeACKState();
  // Wait for Saturn to request second half of Data4
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==0){    
+ while(readS0()==0 && readS1()==0){
  }
-  
+
  sendDataStateHigh();
  PORTC &= ~ DATA4_2;
  changeACKState();
@@ -364,9 +362,9 @@ void emulateAnalogController(){
 
 
  ///// START FIFTH BYTE,
- 
+
 // Wait for Saturn to request first half of Data5
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==1){    
+ while(readS0()==0 && readS1()==1){
  } 
 
  sendDataStateHigh();
@@ -374,7 +372,7 @@ void emulateAnalogController(){
  changeACKState();
 
  // Wait for Saturn to request second half of Data5
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==0){    
+ while(readS0()==0 && readS1()==0){
  }
   
  sendDataStateHigh();
@@ -385,14 +383,14 @@ void emulateAnalogController(){
  ///// START SIXTH BYTE,
 
 // Wait for Saturn to request first half of Data6
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==1){    
+ while(readS0()==0 && readS1()==1){
  }
   
  sendDataStateHigh();
  PORTC &= ~ DATA6_1;
  changeACKState();
 // Wait for Saturn to request second half of Data6
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==0){    
+ while(readS0()==0 && readS1()==0){
  }
  sendDataStateHigh();
  PORTC &= ~ DATA6_2;
@@ -402,25 +400,24 @@ void emulateAnalogController(){
  ///// START SEVENTH BYTE, END OF DATA
   
   // Wait for Saturn to request first half End
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==1){    
+ while(readS0()==0 && readS1()==1){
  }
  sendDataStateLow();
- 
  changeACKState();
   
   // Wait for Saturn to request second half of End
- while(digitalRead(pin_In_S0)==0 && digitalRead(pin_In_S1)==0){    
+ while(readS0()==0 && readS1()==0){
  }
- sendDataStateLow();
+ //sendDataStateLow();
  PORTC |=  DATAEND_2;
  changeACKState();
 
 ///// END SEVENTH BYTE
    
    // Wait for the Saturn to deselect controller
- while(digitalRead(pin_In_S0)==0){    
+ while(readS0()==0){    
  }
-  
+
 ///// END COMMS WITH SATURN
  
  DATA1_1 =  B00000000;
@@ -482,21 +479,21 @@ if(PS4.getButtonPress(L3)){
  if(analogReading >=(128+DeadZone) || analogReading <= (128-DeadZone)) {
 	analogReading = round((255-analogReading)*sensitivity);// since the analog stick gives a reverse output to what the saturn needs we need to subtract the reading from 255 
 	if(analogReading >255){analogReading = 255;}
-    getBinary(analogReading,first_nibble,second_nibble);
+	getBinary(analogReading,first_nibble,second_nibble);
 	DATA3_1 = changeToDataState(first_nibble); 
 	button_clicked=true;
- }//x axis default in netural
+ }//x axis default in neutral
  else{
 	DATA3_1 = B00001000; 
  }
   ///Data3_2
   if(button_clicked){
-	//writes the scondf half of the binary output
+	//writes the second half of the binary output
 	DATA3_2 = changeToDataState(second_nibble);
 	button_clicked=false;
  }//run only if there was no input from the dual shock controller
  else{
-	//default for the next nibble when x axis is in netural position
+	//default for the next nibble when x axis is in neutral position
 	DATA3_2 = B00000000;
  }
  ///Data4_1
@@ -504,10 +501,10 @@ if(PS4.getButtonPress(L3)){
 if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	analogReading = round((255-analogReading)*sensitivity); // since the analog stick give a reverse output to what the saturn needs we need to subtract the reading from 255
 	if(analogReading >255){analogReading = 255;}
-    getBinary(analogReading,first_nibble,second_nibble);
+	getBinary(analogReading,first_nibble,second_nibble);
 	DATA4_1 = changeToDataState(first_nibble);
 	button_clicked=true;
- }//x axis default in netural
+ }//x axis default in neutral
  else{
 	DATA4_1 = B00001000;
  }
@@ -517,18 +514,17 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	button_clicked=false;
  }//run only if there was no input from the dual shock controller
  else{
-	//default for the next nibble when y axis is in netural position
+	//default for the next nibble when y axis is in neutral position
 	DATA4_2 = B00000000;
  }
  
  //Data5_1
  analogReading = PS4.getAnalogButton(R2);
-  if(analogReading != oldR2Value) {
+  if(analogReading >0) {
 	getBinary(analogReading,first_nibble,second_nibble);
 	DATA5_1 = changeToDataState(first_nibble);
-	oldR2Value = analogReading; 
 	button_clicked=true;
- }//x axis default in netural
+ }//x axis default in neutral
  else{
 	DATA5_1 = B00000000;
  }
@@ -538,18 +534,17 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	button_clicked=false;
  }//run only if there was no input from the dual shock controller
  else{
-	//default for the nibble when Right trigger is in netural position
+	//default for the nibble when Right trigger is in neutral position
 	DATA5_2 = B00000000;
  }
  
  //Data6_1
  analogReading = PS4.getAnalogButton(L2);
-  if(analogReading != oldL2Value) {
+  if(analogReading >0) {
 	getBinary(analogReading,first_nibble,second_nibble);
 	DATA6_1 = changeToDataState(first_nibble);   
-	oldL2Value = analogReading;
 	button_clicked=true;
- }//x axis default in netural
+ }//x axis default in neutral
  else{
 	DATA6_1 = B00000000;
  }
@@ -559,7 +554,7 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 	button_clicked=false;
  }//run only if there was no input from the dual shock controller
  else{
-	//default for the nibble when Right trigger is in netural position
+	//default for the nibble when Right trigger is in neutral position
 	DATA6_2 = B00000000;
  }
 }
@@ -627,7 +622,7 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
  //here we convert the integer reading from the DS4 controller to a binary number and split it into two nibbles
  void getBinary(int num, char *first_nibble, char* second_nibble)
  {	
-	for (int i = 7; i >= 0; --i, num >>= 1){		
+	for (int i = 7; i >= 0; --i, num >>= 1){
 		if (i>3){
 			second_nibble[i-4] = (num & 1) + '0';
 		}
@@ -636,3 +631,51 @@ if(analogReading >= (128+DeadZone) || analogReading <= (128-DeadZone)) {
 		}
 	}	
  }
+
+
+bool readS0(){
+ if(PIND & (1<<PD3)){
+	return 1;
+ }
+ else{
+	return 0;
+ }
+}
+
+bool readS1(){
+ if(PIND & (1<<PD4)){
+	return 1;
+ }
+ else{
+	return 0;
+ }
+}
+
+
+//checks the battery status and sets led red for 1/2 a minute if battery is less than 14% of its full charge
+void checkBatteryStatus(){	
+    if(battery_status==false){
+        if(PS4.getBatteryLevel() < 2){
+            battery_timer_elapsed = millis()-battery_timer_start;
+            if(battery_timer_elapsed >=30000){
+                battery_status=true;
+            }
+        }
+        else{
+            battery_status=true;
+        }
+    }
+}
+
+void setLedColor(){
+    if(battery_status == false){
+        PS4.setLed(Red); //battery weak
+    }
+    else if(mode_Selector==0){
+        PS4.setLed(Blue); //digital mode
+    }
+    else{
+        PS4.setLed(Green); //analog mode
+    }
+
+}
