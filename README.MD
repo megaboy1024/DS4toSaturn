@@ -18,6 +18,7 @@ This uses an Arduino and a USB shield to emulate the Sega Saturn controller, ena
 You can toggle between analog and digital using the Options button. When the controller light is green it is set to analog. Blue is digital. The light would be red for 30 seconds on start-up if the battery is below 14% of its full charge
 There is of course no rumble support because the Saturn never supported rumble, but rudimentary support can be added eg. Say you are playing Quake you can add the vibrate code to the button mapped to the gun 
 Trigger to simulate recoil for that specific game. The button will always vibrate the controller though if pressed while not in game.
+
 Being that the Saturn controller has six face buttons and the Dual Shock has only four, the C button is mapped to R3 and Z to L3 on Dual Shock controller(not ideal for fighting games which the DS is a poor controller for anyway).
 
 
@@ -37,7 +38,7 @@ Being that the Saturn controller has six face buttons and the Dual Shock has onl
  - Pair the controller with the Arduino.
  - Power on the Saturn and now plug the controller cable with the Arduino into the Saturn port.
  
- #### Warning
+ ##### Warning
  Powering on the Arduino while the Saturn is off may damage your Saturn (you will be sending 5v down the controller port when the Saturn is not in a state to handle it).
 
 
