@@ -1,22 +1,23 @@
-#include <PS4BT.h>
-#include <usbhub.h>
+
+#include <PS3USB.h>
 
 // Satisfy the IDE, which needs to see the include statment in the ino too.
 #ifdef dobogusinclude
-//#include <spi4teensy3.h>
-#include <SPI.h>
+#include <spi4teensy3.h>
 #endif
-
+#include <SPI.h>
 
 USB Usb;
-//USBHub Hub1(&Usb); // For dongle with an included hub
-BTD Btd(&Usb); // Bluetooth instance
-PS4BT PS4(&Btd, PAIR); //this creates instance of the PS4BT class
-//Pair your Dual Shock controller the usual way by holding the PS button plus the share button
+/* You can create the instance of the class in two ways */
+PS3USB PS3(&Usb); // This will just create the instance
+//PS3USB PS3(&Usb,0x00,0x15,0x83,0x3D,0x0A,0x57); // This will also store the bluetooth address - this can be obtained from the dongle when running the sketch
+
 
 #define DeadZone 10  //Dead area of analog stick
 
-bool  mode_Selector = 0;  //0 is digital mode 1 is analog
+
+uint8_t  mode_Selector = 0;  //0 is digital mode 1 is analog
+float sensitivity = 1.0; //set the sensitivity of the analog stick. Default is 1. Increment in .1's
 
 char DATA1_1, DATA1_2;
 char DATA2_1, DATA2_2;
@@ -27,12 +28,11 @@ char DATA6_1, DATA6_2;
 char DATAEND_1, DATAEND_2;
 
 bool ACK_LINE = 0;
-bool battery_status = false;
 bool power_on = false;
-long battery_timer_start;
 
 
 void setup() {
+
 
  DATA1_1 = B00001111;                 // DATA1_1
  DATA1_2 = B00001111;                 // DATA1_2
@@ -59,7 +59,7 @@ void setup() {
     Serial.print(F("\r\nOSC did not start"));
     while (1); // Halt
   }
- Serial.print(F("\r\nPS4 USB Library Started")); 
+ Serial.print(F("\r\nPS3 USB Library Started")); 
  
  
  if(managePowerState()){
@@ -68,22 +68,20 @@ void setup() {
  }
  //we need to wait for the saturn to startup, 1.5 seconds
  delayMicroseconds(500);
- battery_timer_start = millis();
  }
 
  void loop() {
- 
+
  Usb.Task();
  
  power_on=managePowerState(); //handles powering on and off the saturn
  
  //only if power is on do we want to run this routine
  if(power_on){
-	if (PS4.connected()) {
+	if (PS3.PS3Connected) {
 	
-		checkBatteryStatus();
 		//Changes the controller from Digital to Analog
-		if (PS4.getButtonClick(OPTIONS)){
+		if (PS3.getButtonClick(SELECT)){
 			if(mode_Selector==0){
 				mode_Selector=1; //change state to now operating in analog mode
 				Serial.print(F("\r\nController switched to Analog"));
@@ -95,11 +93,11 @@ void setup() {
 		}
 		if(mode_Selector==0){
 			emulateDigitalController();
-			setLedColor(); //led would change to blue
+			setLed(); //set led one on
 		}
 		else{
 			emulateAnalogController();
-			setLedColor(); //led would change to green
+			setLed(); //set led two on
 		}
 	}
 	else{
@@ -113,7 +111,7 @@ void setup() {
  }
 
 
-void emulateDigitalController(){
+ void emulateDigitalController(){
 
 	////////Handshake////////
 	//we now start communication with the saturn
@@ -216,51 +214,51 @@ Usb.Task();
 	DATA2_2 =  B00000000;
 	
 	//If the Up button pressed
-	if(PS4.getButtonPress(UP)){
+	if(PS3.getButtonPress(UP)){
 		DATA1_1 |= B00000001;
 	}//If the Down button pressed
-	if (PS4.getButtonPress(DOWN)){
+	if (PS3.getButtonPress(DOWN)){
 		DATA1_1 |= B00000010;
 	}//If the Left button pressed
-	if (PS4.getButtonPress(LEFT)){
+	if (PS3.getButtonPress(LEFT)){
 		DATA1_1 |= B00000100;
 	}//If the RIght button pressed
-	if (PS4.getButtonPress(RIGHT)){
+	if (PS3.getButtonPress(RIGHT)){
 		DATA1_1 |=B00001000;
 	}
 	
 	//If the B button pressed
-	if(PS4.getButtonPress(CIRCLE)){
+	if(PS3.getButtonPress(CIRCLE)){
 		DATA1_2 |= B00000001;
 	}//If the C button pressed
-	if (PS4.getButtonPress(R3)){
+	if (PS3.getButtonPress(R3)){
 		DATA1_2 |= B00000010;
 	}
 	//If the A button pressed
-	if (PS4.getButtonPress(CROSS)){
+	if (PS3.getButtonPress(CROSS)){
 		DATA1_2 |= B00000100;
 	}//If the Start button pressed
-	if (PS4.getButtonPress(PS)){
+	if (PS3.getButtonPress(START)){
 		DATA1_2 |= B00001000;
 	}
 	
 	//If the Z button pressed
-	if(PS4.getButtonPress(L3)){
+	if(PS3.getButtonPress(L3)){
 		DATA2_1 |= B00000001;
 	}
 	//If the Y button pressed
-	if (PS4.getButtonPress(TRIANGLE)){
+	if (PS3.getButtonPress(TRIANGLE)){
 		DATA2_1 |= B00000010;
 	}//If the X button pressed
-	if (PS4.getButtonPress(SQUARE)){
+	if (PS3.getButtonPress(SQUARE)){
 		DATA2_1 |= B00000100;
 	}//If the Right trigger button pressed
-	if (PS4.getButtonPress(R1)){
+	if (PS3.getButtonPress(R1)){
 		DATA2_1 |= B00001000;
 	}
 	
 	//If the Left trigger button pressed
-	if (PS4.getButtonPress(L1)){
+	if (PS3.getButtonPress(L1)){
 		DATA2_2 |= B00001000;
 	}
 
@@ -440,56 +438,56 @@ Usb.Task();
 	
 	
 	//If the Up button pressed
-	if(PS4.getButtonPress(UP)){
+	if(PS3.getButtonPress(UP)){
 		DATA1_1 |= B00000001;
 	}//If the Down button pressed
-	if (PS4.getButtonPress(DOWN)){
+	if (PS3.getButtonPress(DOWN)){
 		DATA1_1 |= B00000010;
 	}//If the Left button pressed
-	if (PS4.getButtonPress(LEFT)){
+	if (PS3.getButtonPress(LEFT)){
 		DATA1_1 |= B00000100;
 	}//If the RIght button pressed
-	if (PS4.getButtonPress(RIGHT)){
+	if (PS3.getButtonPress(RIGHT)){
 		DATA1_1 |=B00001000;
 	}
 	
 	//If the B button pressed
-	if(PS4.getButtonPress(CIRCLE)){
+	if(PS3.getButtonPress(CIRCLE)){
 		DATA1_2 |= B00000001;
 	}//If the C button pressed
-	if (PS4.getButtonPress(R3)){
+	if (PS3.getButtonPress(R3)){
 		DATA1_2 |= B00000010;
 	}
 	//If the A button pressed
-	if (PS4.getButtonPress(CROSS)){
+	if (PS3.getButtonPress(CROSS)){
 		DATA1_2 |= B00000100;
 	}//If the Start button pressed
-	if (PS4.getButtonPress(PS)){
+	if (PS3.getButtonPress(START)){
 		DATA1_2 |= B00001000;
 	}
 	
 	//If the Z button pressed
-	if(PS4.getButtonPress(L3)){
+	if(PS3.getButtonPress(L3)){
 		DATA2_1 |= B00000001;
 	}
 	//If the Y button pressed
-	if (PS4.getButtonPress(TRIANGLE)){
+	if (PS3.getButtonPress(TRIANGLE)){
 		DATA2_1 |= B00000010;
 	}//If the X button pressed
-	if (PS4.getButtonPress(SQUARE)){
+	if (PS3.getButtonPress(SQUARE)){
 		DATA2_1 |= B00000100;
 	}//If the Right trigger button pressed
-	if (PS4.getButtonPress(R1)){
+	if (PS3.getButtonPress(R1)){
 		DATA2_1 |= B00001000;
 	}
 	
 	//If the Left trigger button pressed
-	if (PS4.getButtonPress(L1)){
+	if (PS3.getButtonPress(L1)){
 		DATA2_2 |= B00001000;
 	}
  Usb.Task();
 	///Data3_1
-	analogReading = PS4.getAnalogHat(LeftHatX);
+	analogReading = PS3.getAnalogHat(LeftHatX);
 	if(analogReading >=(127+DeadZone) || analogReading <= (127-DeadZone)) {
 		analogReading = (255-analogReading);// since the analog stick gives a reverse output to what the saturn needs we need to subtract the reading from 255 
 		getBinary(analogReading,first_nibble,second_nibble);
@@ -511,7 +509,7 @@ Usb.Task();
 	}
 	
 	//Data5_1
-	analogReading = PS4.getAnalogButton(R2);
+	analogReading = PS3.getAnalogButton(R2);
 	if(analogReading >0) {
 		getBinary(analogReading,first_nibble,second_nibble);
 		DATA5_1 = changeToDataState(first_nibble);
@@ -530,9 +528,10 @@ Usb.Task();
 		DATA5_2 = B00000000;
 	}
 
+	///////////////////////////////
  Usb.Task();
 	///Data4_1
-	analogReading = PS4.getAnalogHat(LeftHatY);
+	analogReading = PS3.getAnalogHat(LeftHatY);
 	if(analogReading >= (127+DeadZone) || analogReading <= (127-DeadZone)) {
 		analogReading = (255-analogReading); // since the analog stick give a reverse output to what the saturn needs we need to subtract the reading from 255
 		getBinary(analogReading,first_nibble,second_nibble);
@@ -553,7 +552,7 @@ Usb.Task();
 	}
 	
 	//Data6_1
-	analogReading = PS4.getAnalogButton(L2);
+	analogReading = PS3.getAnalogButton(L2);
 	if(analogReading >0) {
 		getBinary(analogReading,first_nibble,second_nibble);
 		DATA6_1 = changeToDataState(first_nibble);   
@@ -571,6 +570,7 @@ Usb.Task();
 		//default for the nibble when Right trigger is in neutral position
 		DATA6_2 = B00000000;
 	}
+
 }
 
 
@@ -586,11 +586,9 @@ Usb.Task();
   }
  }
 
-
  void sendDataStateLow(){
   PORTC &= ~B00001111;
  }
- 
  void sendDataStateHigh(){
   PORTC |= B00001111;
  }
@@ -677,6 +675,7 @@ bool readPowerState(){
  }
 }
 
+
  bool managePowerState(){
 
 	if(readPowerState()==1){
@@ -687,34 +686,19 @@ bool readPowerState(){
 	}
  }
 
-//checks the battery status and sets led red for 1/2 a minute if battery is less than 14% of its full charge
-void checkBatteryStatus(){
-    if(battery_status==false){
-        if(PS4.getBatteryLevel() < 2){
-            long battery_timer_elapsed = millis()-battery_timer_start;
-            if(battery_timer_elapsed >=30000){
-                battery_status=true;
-            }
-        }
-        else{
-            battery_status=true;
-        }
-    }
-}
 
-void setLedColor(){
 
-	if(!power_on){
-		PS4.disconnect();
-	}
-    else if(battery_status == false){
-        PS4.setLed(Red); //battery weak
-    }
-    else if(mode_Selector==0){
-        PS4.setLed(Blue); //digital mode
+
+
+void setLed(){
+
+    if(mode_Selector==0){
+        PS3.setLedOff();
+		PS3.setLedOn(LED1); //digital mode
     }
     else{
-        PS4.setLed(Green); //analog mode
+        PS3.setLedOff();
+		PS3.setLedOn(LED2); //analog mode
     }
 
 }
