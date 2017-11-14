@@ -1,28 +1,24 @@
 ## Playstation Dual Shock 3/4 Controller to Sega Saturn adapter.
 
 
-This is released under the GNU General Public License.
-
 
 
 ![Alt text](/DS4toSat.jpg?raw=true "DS4 to Saturn")
  
  
  
- ##### What is new
-  
-  - Added Dual Shock 3 support(USB only for now)
-  - Removed badly implemented sensitivity 
-  - Eliminated the horrible bluetooth lag
-  - 5v line from the controller port now needs to be connected to pin 5 of the Arduino 
- 
- 
-
-
- 
- 
 #### What it is
-This lets you use a PS3 and PS4 controller on your Sega Saturn.
+This lets you use a PS3 or PS4 controller on your Sega Saturn.
+
+
+
+ ##### What is new (11/13/17)
+  
+  - Added a digital mode where the analog stick functions(still digital). DS4 light bar would be magenta when in this mode.
+  - Reworked port manipulation.
+  - Processing analog inputs reworked to be faster and more efficient.
+  - Changed a few other things that should reduce lag.
+
 
 
 #### How it works
@@ -31,7 +27,7 @@ This uses an Arduino and a USB shield to emulate the Sega Saturn controller, ena
 You can toggle between analog and digital using the Options button on the DS4 and Select on the DS3. When the controller light is green it is set to analog. Blue is digital. The light would be red for 30 seconds on start-up if the battery is below 14% of its full charge.
 
 There is of course no rumble support because the Saturn never supported rumble, but rudimentary support can be added eg. Say you are playing Quake you can add the vibrate code to the button mapped to the gun 
-Trigger to simulate recoil for that specific game. The button will always vibrate the controller though if pressed while not in game.
+trigger to simulate recoil for that specific game. The button will always vibrate the controller though if pressed while not in game.
 
 Being that the Saturn controller has six face buttons and the Dual Shock has only four, the C button is mapped to R3 and Z to L3 on Dual Shock controller(not ideal for fighting games which the DS is a poor controller for anyway).
 
@@ -63,5 +59,6 @@ Some of the code used here was built upon the previous work and help of user RDC
 Some minor code used from the USB Host Shield Library.
 
 
-
+ ##### License
+This is released under the GNU General Public License.
 
