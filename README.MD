@@ -62,3 +62,6 @@ Some minor code used from the USB Host Shield Library.
  ##### License
 This is released under the GNU General Public License.
 
+##### Contact info
+I can be contacted at garybethelsgit@digitaltakesroot.com
+
