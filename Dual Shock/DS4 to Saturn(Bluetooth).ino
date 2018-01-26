@@ -112,7 +112,8 @@ void setup() {
 		}
 	}
 	else{
-		sendDataStateHigh(); //if no PS controller is attached we send the data lines to high emulating no controller for the Saturn
+		//sendDataStateHigh(); //if no PS controller is attached we send the data lines to high emulating no controller for the Saturn
+		//emulateUSB
 	}
  }
  else{
